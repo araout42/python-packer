@@ -3,6 +3,11 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.segments import Segment
 import struct
 import os
+from miasm.arch.x86.arch import mn_x86
+from miasm.core.locationdb import LocationDB
+import random
+from decryptor import poly_decrypter
+import argparse
 
 def get_text_section(elf):
     i = 0
@@ -19,10 +24,14 @@ def get_text_section_load_segment(elf, text_section):
             return segment, i
         i = i + 1
 
-def elf_packer(input_file, output_file, num_nops):
+
+def elf_packer(input_file, output_file, key=None):
     PT_NOTE = 4   # Segment type for PT_NOTE
     PT_LOAD = 1   # Segment type for PT_LOAD
+    if key is None:
+        key = random.randint(0, 0xFF)
 
+    print("Encrypting with key: '%s'" % hex(key))
     with open(input_file, 'rb') as file:
         elf = ELFFile(file)
 
@@ -55,7 +64,6 @@ def elf_packer(input_file, output_file, num_nops):
 
         #Modify the segment type to PT_LOAD and flags
         new_values = dict()
-        print(new_values)
         new_values['p_type'] = 0x1
         new_values['p_flags'] = ph_note.header.p_flags | 5  # Set executable and readable flags
         new_values['p_offset']  = os.stat(input_file).st_size
@@ -79,7 +87,6 @@ def elf_packer(input_file, output_file, num_nops):
 
         # Prepare the modified ELF data
         file.seek(0)
-        print(elf.header.e_phentsize)
         modified_elf_data = bytearray(file.read())
 
 
@@ -92,15 +99,10 @@ def elf_packer(input_file, output_file, num_nops):
         #crypt text section here
         text_section_data = modified_elf_data[text_section_offset:text_section_offset+text_section_size]
         for c in range(0, len(text_section_data)):
-            text_section_data[c] = text_section_data[c] ^ 0xAA
+            text_section_data[c] = text_section_data[c] ^ key
         modified_elf_data[text_section_offset:text_section_offset+text_section_size] = text_section_data
-        decrypter = "b8aa000000b9eeeeeeeee8000000005e49b9cccccccccccccccc4c01ce448a064130c044880648ffc648ffc975ef"
-        decrypt_addr = struct.pack('<q', text_section_addr - (struct.unpack('<Q', new_ep)[0] + len("b8aa000000b90000")-1))
-        print(hex(text_section_size))
-        decrypter = decrypter.replace("cccccccccccccccc", decrypt_addr.hex())
-        decrypter = decrypter.replace("eeeeeeee", struct.pack('<I', text_section_size).hex())
-        decrypter = decrypter.replace("aa", "aa")
-        print(decrypter)
+        decrypt_addr = text_section_addr - struct.unpack('<Q', new_ep)[0]
+        decrypter = poly_decrypter(key, len(text_section_data), decrypt_addr, args)
         decrypter = bytearray.fromhex(decrypter)
 
 
@@ -108,7 +110,7 @@ def elf_packer(input_file, output_file, num_nops):
         modified_elf_data[elf.header.e_phoff + seg_for_text_index * elf.header.e_phentsize+4] = 0x7
         modified_elf_data[ph_note_offset:ph_note_offset+elf.header.e_phentsize] = packed_phdr
         modified_elf_data.extend(decrypter)
-        jmp_back = b'\xe9' + struct.pack('<i', o_ep - (new_values['p_vaddr'] + len(decrypter) + 5))
+        jmp_back = b'\xe9' + struct.pack('<i', o_ep - (new_values['p_vaddr'] + len(decrypter))-5)
         modified_elf_data[24:32] = new_ep
         modified_elf_data.extend(jmp_back)
     # Write the modified ELF to a new file
@@ -117,11 +119,20 @@ def elf_packer(input_file, output_file, num_nops):
 
     print(f"ELF file packed: {input_file} -> {output_file}")
 
-if len(sys.argv) >1:
-    input_elf = sys.argv[1]
-else:
-    exit("Usage: python3 Packer.py <input_elf> ")
-output_elf = input_elf+".packed"
 
-number_of_nops = 10
-elf_packer(input_elf, output_elf, number_of_nops)
+
+
+
+parser = argparse.ArgumentParser(description='Parsing arguments for Packer')
+
+parser.add_argument('--key', type=int, default=None, help='Key for decryption')
+parser.add_argument('--preserve-register', '-p', action='store_true',
+                    help='Option to preserve the register.')
+parser.add_argument('file_path', type=str, help='The path to the file to process.')
+args = parser.parse_args()
+if not os.path.exists(args.file_path):
+    print(f"The specified file does not exist: {args.file_path}")
+    exit(1)
+input_elf = args.file_path
+output_elf = input_elf+".packed"
+elf_packer(input_elf, output_elf, args.key)
