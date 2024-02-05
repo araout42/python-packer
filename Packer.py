@@ -103,6 +103,7 @@ def elf_packer(input_file, output_file, key=None):
         modified_elf_data[text_section_offset:text_section_offset+text_section_size] = text_section_data
         decrypt_addr = text_section_addr - struct.unpack('<Q', new_ep)[0]
         decrypter = poly_decrypter(key, len(text_section_data), decrypt_addr, args)
+        print("DECRYPTER : "+decrypter)
         decrypter = bytearray.fromhex(decrypter)
 
 
@@ -133,6 +134,12 @@ args = parser.parse_args()
 if not os.path.exists(args.file_path):
     print(f"The specified file does not exist: {args.file_path}")
     exit(1)
+
+
+
+
 input_elf = args.file_path
 output_elf = input_elf+".packed"
+
+
 elf_packer(input_elf, output_elf, args.key)
