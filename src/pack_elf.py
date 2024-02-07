@@ -7,7 +7,6 @@ from miasm.arch.x86.arch import mn_x86
 from miasm.core.locationdb import LocationDB
 import random
 from decryptor import poly_decrypter
-import argparse
 
 def get_text_section(elf):
     i = 0
@@ -25,12 +24,13 @@ def get_text_section_load_segment(elf, text_section):
         i = i + 1
 
 
-def elf_packer(input_file, output_file, key=None):
+def elf_packer(input_file, output_file, args):
     PT_NOTE = 4   # Segment type for PT_NOTE
     PT_LOAD = 1   # Segment type for PT_LOAD
-    if key is None:
+    if args.key is None:
         key = random.randint(0, 0xFF)
-
+    else:
+        key = int(args.key)
     print("Encrypting with key: '%s'" % hex(key))
     with open(input_file, 'rb') as file:
         elf = ELFFile(file)
@@ -124,22 +124,5 @@ def elf_packer(input_file, output_file, key=None):
 
 
 
-parser = argparse.ArgumentParser(description='Parsing arguments for Packer')
-
-parser.add_argument('--key', type=int, default=None, help='Key for decryption')
-parser.add_argument('--preserve-register', '-p', action='store_true',
-                    help='Option to preserve the register.')
-parser.add_argument('file_path', type=str, help='The path to the file to process.')
-args = parser.parse_args()
-if not os.path.exists(args.file_path):
-    print(f"The specified file does not exist: {args.file_path}")
-    exit(1)
 
 
-
-
-input_elf = args.file_path
-output_elf = input_elf+".packed"
-
-
-elf_packer(input_elf, output_elf, args.key)
