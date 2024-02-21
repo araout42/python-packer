@@ -85,9 +85,11 @@ def get_reg_preservation(registers, way):
     if way == "PUSH":
         for reg in registers:
             reg_preservation.append("PUSH "+reg)
+        reg_preservation.append("PUSHFQ")
         return reg_preservation
     elif way == "POP":
         registers.reverse()
+        reg_preservation.append("POPFQ")
         for reg in registers:
             reg_preservation.append("POP "+reg)
         return reg_preservation
