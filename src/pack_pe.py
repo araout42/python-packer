@@ -22,9 +22,9 @@ def get_text_section(binary):
             return section
     return None
 
-def extend_text_section(text_section, size, decrypter):
-    #text_section.virtual_size += size
-    #text_section.size += size
+def extend_text_section(text_section, size, align, decrypter):
+    text_section.virtual_size = text_section.virtual_size+size
+    text_section.size = adjust_SectionSize(text_section.size+size, align)
     text_section.characteristics = text_section.characteristics | lief.PE.SECTION_CHARACTERISTICS.MEM_WRITE
     print("Text section size:", text_section)
     data = bytearray(text_section.content)
@@ -102,7 +102,7 @@ def pe_packer(input_file, output_file, args):
     #tls = tls_work(binary, new_ep+binary.optional_header.imagebase, key)
     text_section.content = encode_text(text_section, key)
     decrypter = get_decrypter(key, len(text_section.content), old_ep, new_ep, text_section,  args)
-    extend_text_section(text_section, len(decrypter)+5, decrypter)
+    extend_text_section(text_section, len(decrypter)+5, binary.optional_header.section_alignment, decrypter)
     binary.optional_header.addressof_entrypoint = new_ep
     write_file(binary, output_file)
 
